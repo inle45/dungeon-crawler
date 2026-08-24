@@ -3,13 +3,13 @@ package com.dungeoncrawler.wearos.tile
 import androidx.wear.tiles.ColorBuilders.argb
 import androidx.wear.tiles.DimensionBuilders.dp
 import androidx.wear.tiles.DimensionBuilders.expand
-import androidx.wear.tiles.DimensionBuilders.weight
+import androidx.wear.tiles.DimensionBuilders.sp
 import androidx.wear.tiles.LayoutElementBuilders.Box
 import androidx.wear.tiles.LayoutElementBuilders.Column
 import androidx.wear.tiles.LayoutElementBuilders.FontStyle
 import androidx.wear.tiles.LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER
+import androidx.wear.tiles.LayoutElementBuilders.HORIZONTAL_ALIGN_START
 import androidx.wear.tiles.LayoutElementBuilders.LayoutElement
-import androidx.wear.tiles.LayoutElementBuilders.Row
 import androidx.wear.tiles.LayoutElementBuilders.Spacer
 import androidx.wear.tiles.LayoutElementBuilders.Text
 import androidx.wear.tiles.ModifiersBuilders.Background
@@ -74,16 +74,18 @@ object TileRenderer {
         Text.Builder()
             .setText(value)
             .setMaxLines(1)
-            .setFontStyle(FontStyle.Builder().setColor(argb(colorArgb)).setSize(dp(sizeSp)).build())
+            .setFontStyle(FontStyle.Builder().setColor(argb(colorArgb)).setSize(sp(sizeSp)).build())
             .build()
 
     private fun spacer(heightDp: Float): LayoutElement =
         Spacer.Builder().setHeight(dp(heightDp)).build()
 
-    private fun progressBar(ratio: Float, fillColorArgb: Int): LayoutElement =
-        Box.Builder()
-            .setWidth(expand())
-            .setHeight(dp(6f))
+    private fun progressBar(ratio: Float, fillColorArgb: Int): LayoutElement {
+        val fillWidthDp = (TRACK_WIDTH_DP * ratio).coerceAtLeast(TRACK_HEIGHT_DP)
+        return Box.Builder()
+            .setWidth(dp(TRACK_WIDTH_DP))
+            .setHeight(dp(TRACK_HEIGHT_DP))
+            .setHorizontalAlignment(HORIZONTAL_ALIGN_START)
             .setModifiers(
                 Modifiers.Builder()
                     .setBackground(
@@ -95,27 +97,24 @@ object TileRenderer {
                     .build(),
             )
             .addContent(
-                Row.Builder()
-                    .setWidth(expand())
-                    .setHeight(expand())
-                    .addContent(
-                        Box.Builder()
-                            .setWidth(weight(ratio))
-                            .setHeight(expand())
-                            .setModifiers(
-                                Modifiers.Builder()
-                                    .setBackground(
-                                        Background.Builder()
-                                            .setColor(argb(fillColorArgb))
-                                            .setCorner(Corner.Builder().setRadius(dp(3f)).build())
-                                            .build(),
-                                    )
+                Box.Builder()
+                    .setWidth(dp(fillWidthDp))
+                    .setHeight(dp(TRACK_HEIGHT_DP))
+                    .setModifiers(
+                        Modifiers.Builder()
+                            .setBackground(
+                                Background.Builder()
+                                    .setColor(argb(fillColorArgb))
+                                    .setCorner(Corner.Builder().setRadius(dp(3f)).build())
                                     .build(),
                             )
                             .build(),
                     )
-                    .addContent(Box.Builder().setWidth(weight(1f - ratio)).setHeight(expand()).build())
                     .build(),
             )
             .build()
+    }
+
+    private const val TRACK_WIDTH_DP = 130f
+    private const val TRACK_HEIGHT_DP = 6f
 }

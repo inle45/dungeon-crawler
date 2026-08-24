@@ -1,8 +1,8 @@
 package com.dungeoncrawler.wearos.tile
 
+import androidx.wear.protolayout.ResourceBuilders as ProtoResourceBuilders
 import androidx.wear.tiles.LayoutElementBuilders
 import androidx.wear.tiles.RequestBuilders
-import androidx.wear.tiles.ResourceBuilders
 import androidx.wear.tiles.TileBuilders
 import androidx.wear.tiles.TimelineBuilders.Timeline
 import androidx.wear.tiles.TimelineBuilders.TimelineEntry
@@ -11,6 +11,7 @@ import com.dungeoncrawler.wearos.domain.catalog.DungeonCatalog
 import com.dungeoncrawler.wearos.domain.model.Dungeon
 import com.dungeoncrawler.wearos.domain.repository.HeroRepository
 import com.dungeoncrawler.wearos.domain.usecase.ComputeHeroPowerUseCase
+import com.google.android.horologist.annotations.ExperimentalHorologistApi
 import com.google.android.horologist.tiles.SuspendingTileService
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -19,6 +20,7 @@ import javax.inject.Inject
  * Standalone Tile: current HP, the floor the hero stands on, and how far the next boss is —
  * all without launching the app.
  */
+@OptIn(ExperimentalHorologistApi::class)
 @AndroidEntryPoint
 class DungeonCrawlerTileService : SuspendingTileService() {
 
@@ -27,8 +29,8 @@ class DungeonCrawlerTileService : SuspendingTileService() {
 
     override suspend fun resourcesRequest(
         requestParams: RequestBuilders.ResourcesRequest,
-    ): ResourceBuilders.Resources =
-        ResourceBuilders.Resources.Builder().setVersion(RESOURCES_VERSION).build()
+    ): ProtoResourceBuilders.Resources =
+        ProtoResourceBuilders.Resources.Builder().setVersion(RESOURCES_VERSION).build()
 
     override suspend fun tileRequest(requestParams: RequestBuilders.TileRequest): TileBuilders.Tile {
         val hero = heroRepository.getHeroStats()
@@ -57,7 +59,7 @@ class DungeonCrawlerTileService : SuspendingTileService() {
 
         return TileBuilders.Tile.Builder()
             .setResourcesVersion(RESOURCES_VERSION)
-            .setTileTimeline(timeline)
+            .setTimeline(timeline)
             .setFreshnessIntervalMillis(FRESHNESS_INTERVAL_MILLIS)
             .build()
     }

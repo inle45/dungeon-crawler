@@ -37,7 +37,6 @@ import com.dungeoncrawler.wearos.domain.model.EquipmentItem
 import com.dungeoncrawler.wearos.domain.model.ItemPassive
 import com.dungeoncrawler.wearos.domain.model.StatBlock
 import com.dungeoncrawler.wearos.presentation.components.rememberDrawableId
-import com.google.android.horologist.compose.layout.ScalingLazyColumnDefaults
 
 private val StatDown = Color(0xFFE05252)
 
@@ -53,7 +52,6 @@ fun InventoryScreen(
             .fillMaxSize()
             .background(OledBlack),
         state = listState,
-        autoCentering = ScalingLazyColumnDefaults.responsive().autoCentering,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         item {
