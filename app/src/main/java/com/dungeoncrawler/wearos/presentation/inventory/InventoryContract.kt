@@ -21,14 +21,21 @@ data class InventoryState(
     /**
      * Stat delta the player would see by equipping [selectedItem]: the candidate's contribution
      * minus whatever currently holds its slot. Green when it goes up, red when it goes down.
+     *
+     * Compares effective stats, so an epic's multiplier is part of what the player is shown
+     * rather than a hidden bonus they only notice after equipping.
      */
     val comparison: StatBlock?
         get() {
             val candidate = selectedItem ?: return null
             if (candidate.isConsumable) return null
             val current = power?.loadout?.get(candidate.slot)
-            return candidate.stats - (current?.stats ?: StatBlock.EMPTY)
+            return candidate.effectiveStats - (current?.effectiveStats ?: StatBlock.EMPTY)
         }
+
+    /** The item currently occupying the inspected item's slot, if any. */
+    val replacedItem: EquipmentItem?
+        get() = selectedItem?.let { power?.loadout?.get(it.slot) }
 }
 
 sealed class InventoryIntent : MviIntent {

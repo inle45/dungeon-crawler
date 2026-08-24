@@ -8,6 +8,7 @@ import com.dungeoncrawler.wearos.domain.model.HeroPower
 import com.dungeoncrawler.wearos.domain.model.ItemPassive
 import com.dungeoncrawler.wearos.domain.model.Monster
 import com.dungeoncrawler.wearos.domain.model.MonsterRole
+import com.dungeoncrawler.wearos.domain.model.StatBlock
 import com.dungeoncrawler.wearos.domain.repository.GameProgressRepository
 import com.dungeoncrawler.wearos.domain.repository.HeroRepository
 import javax.inject.Inject
@@ -16,7 +17,8 @@ import kotlin.random.Random
 
 /**
  * Resolves one player turn against the floor's boss. Every number here comes from equipped gear
- * — crit chance, armor pierce, life steal and riposte are all item passives, never level-ups.
+ * — crit chance and damage, armor pierce, life steal, dodge and thorns are all item stats or
+ * passives, never level-ups.
  */
 class ExecuteCombatActionUseCase @Inject constructor(
     private val heroRepository: HeroRepository,
@@ -40,15 +42,17 @@ class ExecuteCombatActionUseCase @Inject constructor(
             CombatAction.DEFENSE -> defend(power, monster, monsterHp)
         }
 
-        heroRepository.updateHeroStats { it.copy(currentHp = turn.heroHp) }
+        // Regen ticks once per turn, after the exchange resolves, and never past the ceiling.
+        val heroHp = (turn.heroHp + power.total.hpRegen).coerceAtMost(power.maxHp)
+        heroRepository.updateHeroStats { it.copy(currentHp = heroHp) }
 
         val finalOutcome = when {
             turn.monsterHp <= 0 -> CombatOutcome.MonsterSlain(monster, rollLoot(monster))
-            turn.heroHp <= 0 -> CombatOutcome.PlayerDefeated(monster)
+            heroHp <= 0 -> CombatOutcome.PlayerDefeated(monster)
             else -> turn.outcome
         }
 
-        publishState(finalOutcome, monster, turn)
+        publishState(finalOutcome, monster, turn.copy(heroHp = heroHp))
         return finalOutcome
     }
 
@@ -56,19 +60,21 @@ class ExecuteCombatActionUseCase @Inject constructor(
 
     private fun attack(power: HeroPower, monster: Monster, monsterHp: Int): TurnResult {
         val isCritical = random.nextInt(100) < power.total.critRate
-        val raw = power.total.attack.let { if (isCritical) (it * 1.8f).roundToInt() else it }
+        val critMultiplier = StatBlock.BASE_CRIT_MULTIPLIER + power.total.critDamage / 100f
+
+        val raw = power.total.attack.let { if (isCritical) (it * critMultiplier).roundToInt() else it }
         val damage = raw.afterMonsterDefense(monster, power)
 
-        val lifeStolen = (damage * power.passiveMagnitude(ItemPassive.LIFE_STEAL)).roundToInt()
-        val heroHp = (power.currentHp + lifeStolen).coerceAtMost(power.maxHp)
+        val healed = (damage * power.lifeStealShare()).roundToInt()
+        val heroHp = (power.currentHp + healed).coerceAtMost(power.maxHp)
 
         return TurnResult(
             monsterHp = monsterHp - damage,
             heroHp = heroHp,
             outcome = if (isCritical) {
-                CombatOutcome.PlayerCriticalHit(damage, lifeStolen)
+                CombatOutcome.PlayerCriticalHit(damage, healed)
             } else {
-                CombatOutcome.PlayerStandardHit(damage, lifeStolen)
+                CombatOutcome.PlayerStandardHit(damage, healed)
             },
         )
     }
@@ -76,18 +82,28 @@ class ExecuteCombatActionUseCase @Inject constructor(
     private fun spell(power: HeroPower, monsterHp: Int): TurnResult {
         // Spells bypass armor entirely — that is what makes magic gear worth a slot.
         val damage = (power.total.magicPower + random.nextInt(0, 6)).coerceAtLeast(1)
+        val healed = (damage * power.lifeStealShare()).roundToInt()
+
         return TurnResult(
             monsterHp = monsterHp - damage,
-            heroHp = power.currentHp,
+            heroHp = (power.currentHp + healed).coerceAtMost(power.maxHp),
             outcome = CombatOutcome.PlayerSpellCast(damage),
         )
     }
 
     private fun defend(power: HeroPower, monster: Monster, monsterHp: Int): TurnResult {
         val incoming = monster.attack
-        val parried = random.nextInt(100) < PARRY_CHANCE_PERCENT
 
-        if (parried) {
+        // Dodge is checked before the parry roll: avoiding a hit outright beats blunting it.
+        if (random.nextInt(100) < power.total.dodge) {
+            return TurnResult(
+                monsterHp = monsterHp,
+                heroHp = power.currentHp,
+                outcome = CombatOutcome.PlayerDodged(incoming),
+            )
+        }
+
+        if (random.nextInt(100) < PARRY_CHANCE_PERCENT) {
             val riposte = (incoming * power.passiveMagnitude(ItemPassive.RIPOSTE)).roundToInt()
             return TurnResult(
                 monsterHp = monsterHp - riposte,
@@ -96,21 +112,34 @@ class ExecuteCombatActionUseCase @Inject constructor(
             )
         }
 
-        val mitigated = ((incoming - power.total.defense) * (1f - power.total.damageReduction / 100f))
+        val mitigated = ((incoming - power.total.defense) * (1f - power.damageReductionShare()))
             .roundToInt()
             .coerceAtLeast(1)
+        val reflected = (mitigated * power.total.thorns / 100f).roundToInt()
 
         return TurnResult(
-            monsterHp = monsterHp,
+            monsterHp = monsterHp - reflected,
             heroHp = power.currentHp - mitigated,
-            outcome = CombatOutcome.PlayerDamaged(mitigated),
+            outcome = CombatOutcome.PlayerDamaged(mitigated, reflected),
         )
     }
 
     private fun Int.afterMonsterDefense(monster: Monster, power: HeroPower): Int {
-        val pierced = (monster.defense * (1f - power.passiveMagnitude(ItemPassive.ARMOR_PIERCE)))
-        return (this - pierced).roundToInt().coerceAtLeast(1)
+        // The armor-pierce stat and the legendary passive stack, capped so defense still counts.
+        val pierceShare = (power.total.armorPierce / 100f +
+            power.passiveMagnitude(ItemPassive.ARMOR_PIERCE)).coerceAtMost(MAX_ARMOR_PIERCE)
+        val effectiveDefense = monster.defense * (1f - pierceShare)
+        return (this - effectiveDefense).roundToInt().coerceAtLeast(1)
     }
+
+    /** Life-steal stat plus the legendary passive, capped so a full heal per hit is impossible. */
+    private fun HeroPower.lifeStealShare(): Float =
+        (total.lifeSteal / 100f + passiveMagnitude(ItemPassive.LIFE_STEAL))
+            .coerceAtMost(MAX_LIFE_STEAL)
+
+    private fun HeroPower.damageReductionShare(): Float =
+        (total.damageReduction / 100f + passiveMagnitude(ItemPassive.DAMAGE_REDUCTION))
+            .coerceAtMost(MAX_DAMAGE_REDUCTION)
 
     // ------------------------------------------------------------------ state
 
@@ -158,5 +187,10 @@ class ExecuteCombatActionUseCase @Inject constructor(
 
     private companion object {
         const val PARRY_CHANCE_PERCENT = 40
+
+        // Ceilings keep a fully-geared hero strong without making them unkillable.
+        const val MAX_ARMOR_PIERCE = 0.75f
+        const val MAX_LIFE_STEAL = 0.50f
+        const val MAX_DAMAGE_REDUCTION = 0.60f
     }
 }

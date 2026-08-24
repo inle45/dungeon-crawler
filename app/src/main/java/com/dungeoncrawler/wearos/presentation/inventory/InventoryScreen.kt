@@ -5,7 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -153,6 +154,7 @@ private fun InventoryRow(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatComparison(item: EquipmentItem, comparison: StatBlock?) {
     if (item.isConsumable) {
@@ -164,7 +166,9 @@ private fun StatComparison(item: EquipmentItem, comparison: StatBlock?) {
         return
     }
 
-    val deltas = comparison?.namedDeltas().orEmpty()
+    // Only stats that actually move are listed — with 13 of them, showing every zero would
+    // bury the two numbers the player is deciding on.
+    val deltas = comparison?.namedEntries().orEmpty()
 
     if (deltas.isEmpty()) {
         Text(
@@ -173,7 +177,10 @@ private fun StatComparison(item: EquipmentItem, comparison: StatBlock?) {
             color = TextSecondary,
         )
     } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
             deltas.forEach { (label, delta) ->
                 Text(
                     text = "$label ${if (delta > 0) "+" else ""}$delta",
@@ -193,13 +200,3 @@ private fun StatComparison(item: EquipmentItem, comparison: StatBlock?) {
         )
     }
 }
-
-/** Only the stats that actually move, so the row stays readable on a 1.4" screen. */
-private fun StatBlock.namedDeltas(): List<Pair<String, Int>> = listOf(
-    "PV" to maxHp,
-    "ATQ" to attack,
-    "DEF" to defense,
-    "CRIT" to critRate,
-    "MAG" to magicPower,
-    "RED" to damageReduction,
-).filter { it.second != 0 }

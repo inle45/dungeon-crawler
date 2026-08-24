@@ -47,8 +47,9 @@ data class Loadout(val bySlot: Map<EquipmentSlot, EquipmentItem> = emptyMap()) {
 
     val equippedItems: List<EquipmentItem> get() = bySlot.values.toList()
 
+    // effectiveStats, not stats: epic and legendary tiers carry their multiplier.
     val totalStats: StatBlock =
-        bySlot.values.fold(StatBlock.EMPTY) { acc, item -> acc + item.stats }
+        bySlot.values.fold(StatBlock.EMPTY) { acc, item -> acc + item.effectiveStats }
 
     val passives: List<ItemPassive> =
         bySlot.values.map { it.passive }.filter { it != ItemPassive.NONE }.distinct()

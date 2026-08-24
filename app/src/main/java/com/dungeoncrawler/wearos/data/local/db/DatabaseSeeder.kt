@@ -13,6 +13,9 @@ import javax.inject.Singleton
 /**
  * Writes the static catalogs into Room on first launch: the full bestiary, and the hero's
  * starter gear. Re-runs are cheap and idempotent — everything upserts by primary key.
+ *
+ * Note the inventory holds only what the hero *owns*: the rest of the catalog lives in
+ * [com.dungeoncrawler.wearos.domain.catalog.GearIndex] and only reaches the table when it drops.
  */
 @Singleton
 class DatabaseSeeder @Inject constructor(

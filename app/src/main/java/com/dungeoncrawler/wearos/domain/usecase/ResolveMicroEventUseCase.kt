@@ -3,6 +3,7 @@ package com.dungeoncrawler.wearos.domain.usecase
 import com.dungeoncrawler.wearos.core.haptics.HapticFeedbackManager
 import com.dungeoncrawler.wearos.core.haptics.HapticPattern
 import com.dungeoncrawler.wearos.domain.model.GameState
+import com.dungeoncrawler.wearos.domain.model.HeroPower
 import com.dungeoncrawler.wearos.domain.model.MicroEvent
 import com.dungeoncrawler.wearos.domain.repository.GameProgressRepository
 import com.dungeoncrawler.wearos.domain.repository.HeroRepository
@@ -31,9 +32,16 @@ class ResolveMicroEventUseCase @Inject constructor(
 
         val event = when (random.nextInt(10)) {
             in 0..2 -> resolveLoot(progress.currentDungeonId)
-            in 3..4 -> resolveTrap(power.total.defense, power.total.damageReduction)
-            else -> resolveMicroMob(progress.currentDungeonId, power.total.defense, power.total.damageReduction)
+            in 3..4 -> resolveTrap(power)
+            else -> resolveMicroMob(progress.currentDungeonId, power)
         } ?: return null
+
+        // Regen ticks once per resolved event, so it pays out while simply walking.
+        if (power.total.hpRegen > 0) {
+            heroRepository.updateHeroStats { hero ->
+                hero.copy(currentHp = (hero.currentHp + power.total.hpRegen).coerceAtMost(power.maxHp))
+            }
+        }
 
         gameProgressRepository.setGameState(GameState.MicroEventResolved(progress, event))
         hapticFeedbackManager.play(event.hapticPattern())
@@ -46,28 +54,30 @@ class ResolveMicroEventUseCase @Inject constructor(
         return MicroEvent.Loot(item)
     }
 
-    private suspend fun resolveTrap(defense: Int, damageReduction: Int): MicroEvent {
-        val raw = random.nextInt(6, 16)
-        return MicroEvent.Trap(damage = applyDamage(raw, defense, damageReduction))
-    }
+    private suspend fun resolveTrap(power: HeroPower): MicroEvent =
+        MicroEvent.Trap(damage = applyDamage(random.nextInt(6, 16), power))
 
-    private suspend fun resolveMicroMob(
-        dungeonId: String,
-        defense: Int,
-        damageReduction: Int,
-    ): MicroEvent? {
+    private suspend fun resolveMicroMob(dungeonId: String, power: HeroPower): MicroEvent? {
         val mob = monsterRepository.randomMicroMob(dungeonId) ?: return null
         val raw = (mob.attack * random.nextDouble(0.4, 0.9)).roundToInt()
         return MicroEvent.MicroMobSlain(
             monster = mob,
-            damageTaken = applyDamage(raw, defense, damageReduction),
+            damageTaken = applyDamage(raw, power),
             loot = rollLoot(mob),
         )
     }
 
-    /** Shared mitigation path so defense and damage-reduction gear matter passively too. */
-    private suspend fun applyDamage(raw: Int, defense: Int, damageReduction: Int): Int {
-        val mitigated = ((raw - defense / 2) * (1f - damageReduction / 100f))
+    /**
+     * Shared mitigation path so defensive gear matters while walking too: dodge can void the hit
+     * outright, then defense and damage reduction blunt what lands.
+     *
+     * A passive event never kills — HP floors at 1. Losing a run without looking at the watch
+     * would punish the player for the mode the game is built around.
+     */
+    private suspend fun applyDamage(raw: Int, power: HeroPower): Int {
+        if (random.nextInt(100) < power.total.dodge) return 0
+
+        val mitigated = ((raw - power.total.defense / 2) * (1f - power.total.damageReduction / 100f))
             .roundToInt()
             .coerceAtLeast(1)
         heroRepository.updateHeroStats { hero ->

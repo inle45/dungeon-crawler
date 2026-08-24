@@ -90,6 +90,8 @@ class BossCombatViewModel @Inject constructor(
         is CombatOutcome.PlayerStandardHit -> HapticPattern.STANDARD_HIT
         is CombatOutcome.PlayerSpellCast -> HapticPattern.SPELL_CAST
         is CombatOutcome.PlayerParried -> HapticPattern.PARRY_SUCCESS
+        // A dodge is a clean miss, not a block: a lighter double-tick reads differently on the wrist.
+        is CombatOutcome.PlayerDodged -> HapticPattern.MICRO_EVENT_LOOT
         is CombatOutcome.PlayerDamaged -> HapticPattern.DAMAGE_TAKEN
         is CombatOutcome.MonsterSlain -> HapticPattern.CRITICAL_HIT
         is CombatOutcome.PlayerDefeated -> HapticPattern.DAMAGE_TAKEN

@@ -20,6 +20,8 @@ actively in short boss fights on the wrist.
     inventory slot icons.
   - `mon_*.png` — 60 bestiary sprites, one per monster (64px mobs, 96px mini-bosses,
     112px supreme bosses), single-frame stills.
+  - `gear_*.png` — 60 equipment icons, one per dungeon item, themed to its dungeon and scaled in
+    ornateness with its rarity.
   - New sprites follow the same pipeline: generate with PixelLab, stitch multi-frame animations
     into one horizontal strip of 4-6 frames, drop the PNG into `drawable-nodpi`.
 - **`PixelSpriteAnimation`** (`core/sprite/PixelSpriteAnimation.kt`) decodes a spritesheet once
@@ -67,8 +69,18 @@ resolved in exactly one place, `ComputeHeroPowerUseCase`.
 Legendary and epic passives (`domain/model/ItemPassive.kt`) are resolved during combat:
 life steal, riposte, armor pierce, damage reduction.
 
-The ten starting items live in `domain/catalog/EquipmentCatalog.kt` and are seeded into Room on
-first launch (`data/local/db/DatabaseSeeder.kt`).
+**Thirteen stats** (`domain/model/StatBlock.kt`), every one of them read somewhere in
+`domain/usecase/`: HP, attack, defense, crit rate, crit damage, magic power, damage reduction,
+life steal, dodge, armor pierce, thorns, loot bonus and HP regen.
+
+**Seventy items.** The ten base pieces in `domain/catalog/EquipmentCatalog.kt` drop anywhere and
+seed the starting loadout. On top of that, `domain/catalog/DungeonGearCatalog.kt` holds **20
+pieces per dungeon** — one for each of that dungeon's 20 monsters — grouped into *families*: one
+silhouette appearing at several rarities (`Lame d'ossement` → `affûtée` → `runique`), so farming
+a dungeon upgrades gear you recognise instead of piling up unrelated names.
+
+That file is generated from `tools/gear/gear_data.py` by `build_gear.py`, which refuses to
+emit it if any item breaks its rarity's secondary-bonus contract.
 
 ## Dungeons, floors and bestiary
 
@@ -79,8 +91,10 @@ Three themed dungeons (`domain/catalog/DungeonCatalog.kt`), each **10 floors**:
 3. *Sanctuaire du Vide Rampant* — ×2.4
 
 Each dungeon owns exactly **20 monsters**: 15 micro-mobs, 4 mini-bosses, 1 supreme boss.
-Drop tables are weighted twice — by the table row's own weight and by the item's
-`Rarity.lootWeight` — so a legendary listed beside a common still lands far less often.
+Drop tables are built from the dungeon's own 20-piece pool plus the base catalog, and a
+monster's rank decides which rarity bands it can open: micro-mobs stay low, only supreme bosses
+can hand out legendaries. A band's weight is split across its pool, so adding an item to a
+rarity dilutes that rarity rather than making the whole band likelier.
 
 ### The loop
 
@@ -111,10 +125,11 @@ Drop tables are weighted twice — by the table row's own weight and by the item
 
 ## Persistence
 
-Room v3 (`data/local/db/`), three entities:
+Room v4 (`data/local/db/`), three entities:
 
 - `HeroStateEntity` — base stats, current HP, steps, current dungeon + floor, unlocked/cleared sets.
-- `InventoryItemEntity` — id, name, slot, rarity, bonus stats, passive, `isEquipped`.
+- `InventoryItemEntity` — id, name, slot, rarity, the 13 bonus stats, passive, family,
+  source dungeon, `isEquipped`.
 - `MonsterEntity` — stats, packed drop table, sprite asset and its frame count.
 
 ## Building

@@ -5,6 +5,7 @@ import com.dungeoncrawler.wearos.domain.model.Dungeon
 import com.dungeoncrawler.wearos.domain.model.LootDrop
 import com.dungeoncrawler.wearos.domain.model.Monster
 import com.dungeoncrawler.wearos.domain.model.MonsterRole
+import com.dungeoncrawler.wearos.domain.model.Rarity
 
 /**
  * The three themed dungeons and their bestiaries. Each dungeon holds exactly 20 monsters:
@@ -59,26 +60,42 @@ object DungeonCatalog {
 
     // ---------------------------------------------------------------- drop tables
 
-    private val COMMON_TABLE = listOf(
-        LootDrop(Gear.RUSTY_SWORD.id, weight = 40),
-        LootDrop(Gear.WORN_LEATHER_TUNIC.id, weight = 40),
-        LootDrop(Gear.MAJOR_HEALING_POTION.id, weight = 20),
-    )
+    /**
+     * Tables are built from the dungeon's own 20-piece pool in [DungeonGearCatalog], plus the
+     * base catalog that drops anywhere. A monster's rank decides which rarity bands it can open:
+     * micro-mobs stay in the low tiers, only supreme bosses can hand out legendaries.
+     */
+    private fun tableFor(dungeonId: String, role: MonsterRole): List<LootDrop> {
+        val bands: Map<Rarity, Int> = when (role) {
+            MonsterRole.MICRO_MOB -> mapOf(
+                Rarity.COMMON to 60,
+                Rarity.UNCOMMON to 30,
+                Rarity.RARE to 10,
+            )
+            MonsterRole.MINI_BOSS -> mapOf(
+                Rarity.UNCOMMON to 40,
+                Rarity.RARE to 40,
+                Rarity.EPIC to 20,
+            )
+            MonsterRole.SUPREME_BOSS -> mapOf(
+                Rarity.RARE to 25,
+                Rarity.EPIC to 45,
+                Rarity.LEGENDARY to 30,
+            )
+        }
 
-    private val MINI_BOSS_TABLE = listOf(
-        LootDrop(Gear.FORGED_PLATE_CUIRASS.id, weight = 30),
-        LootDrop(Gear.RING_OF_VITALITY.id, weight = 30),
-        LootDrop(Gear.SHADOW_DAGGER.id, weight = 20),
-        LootDrop(Gear.ABYSS_AMULET.id, weight = 15),
-        LootDrop(Gear.MAJOR_HEALING_POTION.id, weight = 5),
-    )
-
-    private val SUPREME_TABLE = listOf(
-        LootDrop(Gear.ABYSSAL_TITAN_ARMOR.id, weight = 35),
-        LootDrop(Gear.SLAYERS_SIGNET.id, weight = 35),
-        LootDrop(Gear.ANCESTRAL_RUNEBLADE.id, weight = 20),
-        LootDrop(Gear.SHADOW_DAGGER.id, weight = 10),
-    )
+        return bands.flatMap { (rarity, bandWeight) ->
+            val pool = DungeonGearCatalog.gearOf(dungeonId, rarity) + Gear.ofRarity(rarity)
+            if (pool.isEmpty()) {
+                emptyList()
+            } else {
+                // Split the band's weight across its pool so adding an item to a rarity dilutes
+                // that rarity rather than making the whole band more likely.
+                val perItem = (bandWeight / pool.size).coerceAtLeast(1)
+                pool.map { LootDrop(it.id, weight = perItem) }
+            }
+        }
+    }
 
     // ---------------------------------------------------------------- bestiaries
 
@@ -98,7 +115,7 @@ object DungeonCatalog {
         maxHp = (hp * dungeon.difficultyMultiplier).toInt(),
         attack = (atk * dungeon.difficultyMultiplier).toInt(),
         defense = (def * dungeon.difficultyMultiplier).toInt(),
-        dropTable = COMMON_TABLE,
+        dropTable = tableFor(dungeon.id, MonsterRole.MICRO_MOB),
         spriteRes = sprite,
     )
 
@@ -118,7 +135,7 @@ object DungeonCatalog {
         maxHp = (hp * dungeon.difficultyMultiplier).toInt(),
         attack = (atk * dungeon.difficultyMultiplier).toInt(),
         defense = (def * dungeon.difficultyMultiplier).toInt(),
-        dropTable = MINI_BOSS_TABLE,
+        dropTable = tableFor(dungeon.id, MonsterRole.MINI_BOSS),
         spriteRes = sprite,
     )
 
@@ -137,7 +154,7 @@ object DungeonCatalog {
         maxHp = (hp * dungeon.difficultyMultiplier).toInt(),
         attack = (atk * dungeon.difficultyMultiplier).toInt(),
         defense = (def * dungeon.difficultyMultiplier).toInt(),
-        dropTable = SUPREME_TABLE,
+        dropTable = tableFor(dungeon.id, MonsterRole.SUPREME_BOSS),
         spriteRes = sprite,
     )
 

@@ -1,6 +1,6 @@
 package com.dungeoncrawler.wearos.domain.usecase
 
-import com.dungeoncrawler.wearos.domain.catalog.EquipmentCatalog
+import com.dungeoncrawler.wearos.domain.catalog.GearIndex
 import com.dungeoncrawler.wearos.domain.model.EquipmentItem
 import com.dungeoncrawler.wearos.domain.model.Monster
 import com.dungeoncrawler.wearos.domain.model.MonsterRole
@@ -15,14 +15,18 @@ import kotlin.random.Random
  */
 class RollLootUseCase @Inject constructor(
     private val inventoryRepository: InventoryRepository,
+    private val computeHeroPower: ComputeHeroPowerUseCase,
 ) {
     private val random = Random.Default
 
     suspend operator fun invoke(monster: Monster): EquipmentItem? {
-        if (random.nextFloat() > monster.role.dropChance()) return null
+        // Loot-bonus gear tilts the roll, which is the whole point of wearing it.
+        val lootBonus = computeHeroPower.once().total.lootBonus / 100f
+        val chance = (monster.role.dropChance() + lootBonus).coerceAtMost(1f)
+        if (random.nextFloat() > chance) return null
 
         val weighted = monster.dropTable.mapNotNull { drop ->
-            val item = EquipmentCatalog.findById(drop.itemId) ?: return@mapNotNull null
+            val item = GearIndex.findById(drop.itemId) ?: return@mapNotNull null
             item to drop.weight * item.rarity.lootWeight
         }
         if (weighted.isEmpty()) return null

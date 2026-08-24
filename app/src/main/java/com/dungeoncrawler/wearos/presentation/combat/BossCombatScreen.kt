@@ -205,7 +205,11 @@ private fun combatOutcomeLabel(outcome: CombatOutcome?): String = when (outcome)
         append("Paré !")
         if (outcome.riposteDamage > 0) append(" Riposte -${outcome.riposteDamage}")
     }
-    is CombatOutcome.PlayerDamaged -> "Aïe ! -${outcome.damageTaken} PV"
+    is CombatOutcome.PlayerDodged -> "Esquivé ! (${outcome.damageAvoided} évités)"
+    is CombatOutcome.PlayerDamaged -> buildString {
+        append("Aïe ! -${outcome.damageTaken} PV")
+        if (outcome.damageReflected > 0) append(" · Épines -${outcome.damageReflected}")
+    }
     is CombatOutcome.MonsterSlain -> "${outcome.monster.name} vaincu !"
     is CombatOutcome.PlayerDefeated -> "Vous êtes tombé…"
 }
