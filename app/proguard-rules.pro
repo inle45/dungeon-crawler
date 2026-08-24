@@ -1,0 +1,1 @@
+-keep class com.dungeoncrawler.wearos.data.local.db.** { *; }
