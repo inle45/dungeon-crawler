@@ -18,6 +18,8 @@ actively in short boss fights on the wrist.
   - `icon_attack_sword.png`, `icon_defense_shield.png`, `icon_spell_wand.png` — combat actions.
   - `icon_item_armor.png`, `icon_item_ring.png`, `icon_item_relic.png`, `icon_item_potion.png` —
     inventory slot icons.
+  - `mon_*.png` — 60 bestiary sprites, one per monster (64px mobs, 96px mini-bosses,
+    112px supreme bosses), single-frame stills.
   - New sprites follow the same pipeline: generate with PixelLab, stitch multi-frame animations
     into one horizontal strip of 4-6 frames, drop the PNG into `drawable-nodpi`.
 - **`PixelSpriteAnimation`** (`core/sprite/PixelSpriteAnimation.kt`) decodes a spritesheet once
