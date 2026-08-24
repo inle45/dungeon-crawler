@@ -111,11 +111,11 @@ Drop tables are weighted twice — by the table row's own weight and by the item
 
 ## Persistence
 
-Room v2 (`data/local/db/`), three entities:
+Room v3 (`data/local/db/`), three entities:
 
 - `HeroStateEntity` — base stats, current HP, steps, current dungeon + floor, unlocked/cleared sets.
 - `InventoryItemEntity` — id, name, slot, rarity, bonus stats, passive, `isEquipped`.
-- `MonsterEntity` — stats, packed drop table, sprite asset.
+- `MonsterEntity` — stats, packed drop table, sprite asset and its frame count.
 
 ## Building
 
