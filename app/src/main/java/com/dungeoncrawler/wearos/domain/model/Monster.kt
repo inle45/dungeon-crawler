@@ -16,7 +16,10 @@ enum class MonsterRole {
  * One entry of a dungeon's 20-monster bestiary.
  *
  * @param dropTable weighted loot rolled when the monster dies; see [LootDrop].
- * @param spriteRes drawable name of the Pixel Lab AI sprite sheet used to render it.
+ * @param spriteRes drawable name of the Pixel Lab AI sprite used to render it.
+ * @param spriteFrameCount frames packed in [spriteRes]. Bestiary art is generated as single
+ *   stills, so this stays 1 unless a monster gets a stitched multi-frame sheet — passing the
+ *   wrong count would slice one sprite into vertical strips.
  */
 data class Monster(
     val id: String,
@@ -27,7 +30,8 @@ data class Monster(
     val attack: Int,
     val defense: Int,
     val dropTable: List<LootDrop>,
-    val spriteRes: String = "boss_idle_spritesheet",
+    val spriteRes: String,
+    val spriteFrameCount: Int = 1,
 ) {
     val isBoss: Boolean get() = role != MonsterRole.MICRO_MOB
 }

@@ -21,6 +21,7 @@ data class MonsterEntity(
     val defense: Int,
     val dropTable: String,
     val spriteRes: String,
+    val spriteFrameCount: Int,
 )
 
 fun MonsterEntity.toDomain() = Monster(
@@ -33,6 +34,7 @@ fun MonsterEntity.toDomain() = Monster(
     defense = defense,
     dropTable = dropTable.toDropTable(),
     spriteRes = spriteRes,
+    spriteFrameCount = spriteFrameCount,
 )
 
 fun Monster.toEntity() = MonsterEntity(
@@ -45,6 +47,7 @@ fun Monster.toEntity() = MonsterEntity(
     defense = defense,
     dropTable = dropTable.joinToString(",") { "${it.itemId}:${it.weight}" },
     spriteRes = spriteRes,
+    spriteFrameCount = spriteFrameCount,
 )
 
 private fun String.toDropTable(): List<LootDrop> =

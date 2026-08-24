@@ -115,7 +115,7 @@ private fun CombatArena(state: BossCombatState) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             val heroSprite = rememberSpriteSheet(
                 R.drawable.hero_idle_spritesheet,
-                frameCount = GameConstants.SPRITE_FRAME_COUNT,
+                frameCount = GameConstants.HERO_SPRITE_FRAME_COUNT,
             )
             PixelSpriteAnimation(spriteSheet = heroSprite, modifier = Modifier.size(52.dp))
             StatBar(
@@ -131,12 +131,14 @@ private fun CombatArena(state: BossCombatState) {
         Text(text = "VS", style = MaterialTheme.typography.caption3, color = TextSecondary)
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Bestiary art is a single still, so the sheet is read with the monster's own frame
+            // count rather than the hero's 4 — slicing a still into 4 would show a quarter of it.
             val bossSprite = rememberSpriteSheet(
-                rememberDrawableId(
+                resId = rememberDrawableId(
                     state.monster?.spriteRes ?: "boss_idle_spritesheet",
                     fallback = R.drawable.boss_idle_spritesheet,
                 ),
-                frameCount = GameConstants.SPRITE_FRAME_COUNT,
+                frameCount = state.monster?.spriteFrameCount ?: 1,
             )
             PixelSpriteAnimation(
                 spriteSheet = bossSprite,

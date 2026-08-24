@@ -1,5 +1,6 @@
 package com.dungeoncrawler.wearos.presentation.dungeon
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,6 +37,7 @@ import com.dungeoncrawler.wearos.domain.GameConstants
 import com.dungeoncrawler.wearos.domain.model.Dungeon
 import com.dungeoncrawler.wearos.domain.model.MicroEvent
 import com.dungeoncrawler.wearos.presentation.components.StatBar
+import com.dungeoncrawler.wearos.presentation.components.rememberDrawableId
 import kotlinx.coroutines.flow.collectLatest
 
 /**
@@ -90,7 +93,7 @@ fun DungeonNavigationScreen(
 
         val heroSprite = rememberSpriteSheet(
             R.drawable.hero_idle_spritesheet,
-            frameCount = GameConstants.SPRITE_FRAME_COUNT,
+            frameCount = GameConstants.HERO_SPRITE_FRAME_COUNT,
         )
         PixelSpriteAnimation(
             spriteSheet = heroSprite,
@@ -127,17 +130,44 @@ fun DungeonNavigationScreen(
         )
 
         state.lastMicroEvent?.let { event ->
-            Text(
-                text = event.label(),
-                style = MaterialTheme.typography.caption3,
-                color = GoldAccent,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .clickable { viewModel.processIntent(DungeonNavigationIntent.DismissMicroEvent) },
+            MicroEventBanner(
+                event = event,
+                onDismiss = { viewModel.processIntent(DungeonNavigationIntent.DismissMicroEvent) },
+                modifier = Modifier.padding(top = 8.dp),
             )
         }
+    }
+}
+
+/**
+ * The last thing that happened while walking. A slain micro-mob shows its own Pixel Lab sprite
+ * next to the label, so the player sees *what* they killed, not just that something died.
+ */
+@Composable
+private fun MicroEventBanner(
+    event: MicroEvent,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.clickable { onDismiss() },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+    ) {
+        if (event is MicroEvent.MicroMobSlain) {
+            Image(
+                painter = painterResource(id = rememberDrawableId(event.monster.spriteRes)),
+                contentDescription = event.monster.name,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Text(
+            text = event.label(),
+            style = MaterialTheme.typography.caption3,
+            color = GoldAccent,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+        )
     }
 }
 

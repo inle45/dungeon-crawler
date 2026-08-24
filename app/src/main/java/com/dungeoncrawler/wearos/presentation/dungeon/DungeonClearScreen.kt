@@ -29,9 +29,9 @@ import com.dungeoncrawler.wearos.core.sprite.rememberSpriteSheet
 import com.dungeoncrawler.wearos.core.theme.GoldAccent
 import com.dungeoncrawler.wearos.core.theme.OledBlack
 import com.dungeoncrawler.wearos.core.theme.TextSecondary
-import com.dungeoncrawler.wearos.domain.GameConstants
 import com.dungeoncrawler.wearos.domain.model.DungeonClearChoice
 import com.dungeoncrawler.wearos.presentation.components.RotarySelector
+import com.dungeoncrawler.wearos.presentation.components.rememberDrawableId
 import kotlinx.coroutines.flow.collectLatest
 
 /**
@@ -81,13 +81,16 @@ fun DungeonClearScreen(
             )
 
             val bossSprite = rememberSpriteSheet(
-                R.drawable.boss_idle_spritesheet,
-                frameCount = GameConstants.SPRITE_FRAME_COUNT,
+                resId = rememberDrawableId(
+                    state.supremeBoss?.spriteRes ?: "boss_idle_spritesheet",
+                    fallback = R.drawable.boss_idle_spritesheet,
+                ),
+                frameCount = state.supremeBoss?.spriteFrameCount ?: 1,
             )
             PixelSpriteAnimation(
                 spriteSheet = bossSprite,
                 modifier = Modifier.size(52.dp),
-                // The boss is down: hold frame 0 rather than looping its idle breathing.
+                // The boss is down: hold frame 0 rather than looping any idle animation.
                 isPlaying = false,
             )
 
