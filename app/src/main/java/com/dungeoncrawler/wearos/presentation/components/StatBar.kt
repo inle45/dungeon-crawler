@@ -11,17 +11,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dungeoncrawler.wearos.core.theme.TextSecondary
 
-/** Slim horizontal bar (HP, boss-progress, XP) that stays legible against the pure black background. */
+/** Slim horizontal bar (HP, boss-progress) that stays legible against the pure black background. */
 @Composable
 fun StatBar(
     ratio: Float,
     color: Color,
     modifier: Modifier = Modifier,
     trackColor: Color = TextSecondary.copy(alpha = 0.25f),
-    height: androidx.compose.ui.unit.Dp = 6.dp,
+    height: Dp = 6.dp,
 ) {
     Box(
         modifier = modifier

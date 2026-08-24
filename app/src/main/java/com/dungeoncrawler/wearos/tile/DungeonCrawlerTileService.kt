@@ -7,18 +7,23 @@ import androidx.wear.tiles.TileBuilders
 import androidx.wear.tiles.TimelineBuilders.Timeline
 import androidx.wear.tiles.TimelineBuilders.TimelineEntry
 import com.dungeoncrawler.wearos.domain.GameConstants
-import com.dungeoncrawler.wearos.domain.repository.PlayerRepository
+import com.dungeoncrawler.wearos.domain.catalog.DungeonCatalog
+import com.dungeoncrawler.wearos.domain.model.Dungeon
+import com.dungeoncrawler.wearos.domain.repository.HeroRepository
+import com.dungeoncrawler.wearos.domain.usecase.ComputeHeroPowerUseCase
 import com.google.android.horologist.tiles.SuspendingTileService
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.flow.first
 
-/** Standalone Tile: shows current HP and a progress bar toward the next boss encounter. */
+/**
+ * Standalone Tile: current HP, the floor the hero stands on, and how far the next boss is —
+ * all without launching the app.
+ */
 @AndroidEntryPoint
 class DungeonCrawlerTileService : SuspendingTileService() {
 
-    @Inject
-    lateinit var playerRepository: PlayerRepository
+    @Inject lateinit var heroRepository: HeroRepository
+    @Inject lateinit var computeHeroPower: ComputeHeroPowerUseCase
 
     override suspend fun resourcesRequest(
         requestParams: RequestBuilders.ResourcesRequest,
@@ -26,14 +31,20 @@ class DungeonCrawlerTileService : SuspendingTileService() {
         ResourceBuilders.Resources.Builder().setVersion(RESOURCES_VERSION).build()
 
     override suspend fun tileRequest(requestParams: RequestBuilders.TileRequest): TileBuilders.Tile {
-        val player = playerRepository.observePlayerStats().first()
-        val stepsIntoBossCycle = player.totalSteps % GameConstants.STEPS_PER_BOSS_ENCOUNTER
+        val hero = heroRepository.getHeroStats()
+        val progress = heroRepository.getDungeonProgress()
+        val power = computeHeroPower.once()
+        val dungeon = DungeonCatalog.findById(progress.currentDungeonId) ?: DungeonCatalog.FIRST
 
         val layout = TileRenderer.render(
-            currentHp = player.currentHp,
-            maxHp = player.maxHp,
-            stepsIntoBossCycle = stepsIntoBossCycle,
+            dungeonName = dungeon.name,
+            currentFloor = progress.currentFloor,
+            totalFloors = Dungeon.FLOORS_PER_DUNGEON,
+            currentHp = power.currentHp,
+            maxHp = power.maxHp,
+            stepsIntoBossCycle = hero.totalSteps % GameConstants.STEPS_PER_BOSS_ENCOUNTER,
             stepsPerBossEncounter = GameConstants.STEPS_PER_BOSS_ENCOUNTER,
+            accentColorArgb = dungeon.accentColorArgb,
         )
 
         val timeline = Timeline.Builder()
@@ -47,10 +58,14 @@ class DungeonCrawlerTileService : SuspendingTileService() {
         return TileBuilders.Tile.Builder()
             .setResourcesVersion(RESOURCES_VERSION)
             .setTileTimeline(timeline)
+            .setFreshnessIntervalMillis(FRESHNESS_INTERVAL_MILLIS)
             .build()
     }
 
     private companion object {
         const val RESOURCES_VERSION = "1"
+
+        /** Steps accrue slowly; refreshing every 10 minutes keeps the tile honest without cost. */
+        const val FRESHNESS_INTERVAL_MILLIS = 10 * 60 * 1000L
     }
 }

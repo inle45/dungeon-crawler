@@ -6,6 +6,7 @@ import com.dungeoncrawler.wearos.core.haptics.HapticPattern
 import com.dungeoncrawler.wearos.domain.model.CombatOutcome
 import com.dungeoncrawler.wearos.domain.model.GameState
 import com.dungeoncrawler.wearos.domain.repository.GameProgressRepository
+import com.dungeoncrawler.wearos.domain.usecase.ComputeHeroPowerUseCase
 import com.dungeoncrawler.wearos.domain.usecase.ExecuteCombatActionUseCase
 import com.dungeoncrawler.wearos.presentation.mvi.MviViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,20 +16,30 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class BossCombatViewModel @Inject constructor(
-    private val executeCombatActionUseCase: ExecuteCombatActionUseCase,
+    private val executeCombatAction: ExecuteCombatActionUseCase,
+    private val computeHeroPower: ComputeHeroPowerUseCase,
     private val gameProgressRepository: GameProgressRepository,
     private val hapticFeedbackManager: HapticFeedbackManager,
 ) : MviViewModel<BossCombatState, BossCombatIntent, BossCombatEffect>(BossCombatState()) {
 
     init {
-        val current = gameProgressRepository.gameState.value
-        if (current is GameState.BossEncounterTriggered) {
-            setState { copy(player = current.player, boss = current.boss) }
-            viewModelScope.launch {
-                gameProgressRepository.setGameState(GameState.InCombat(current.player, current.boss))
+        viewModelScope.launch {
+            // Promote the pending encounter into an active fight the first time we land here.
+            val pending = gameProgressRepository.gameState.value
+            if (pending is GameState.BossEncounterTriggered) {
+                gameProgressRepository.setGameState(
+                    GameState.InCombat(
+                        progress = pending.progress,
+                        monster = pending.monster,
+                        monsterHp = pending.monster.maxHp,
+                        heroHp = computeHeroPower.once().currentHp,
+                    ),
+                )
             }
-        } else if (current is GameState.InCombat) {
-            setState { copy(player = current.player, boss = current.boss) }
+        }
+
+        viewModelScope.launch {
+            computeHeroPower().collectLatest { power -> setState { copy(power = power) } }
         }
 
         viewModelScope.launch {
@@ -36,13 +47,16 @@ class BossCombatViewModel @Inject constructor(
                 when (gameState) {
                     is GameState.InCombat -> setState {
                         copy(
-                            player = gameState.player,
-                            boss = gameState.boss,
+                            monster = gameState.monster,
+                            monsterHp = gameState.monsterHp,
+                            floorLabel = gameState.progress.floorLabel,
                             lastOutcome = gameState.lastOutcome,
                             isResolving = false,
                         )
                     }
-                    is GameState.Victory, is GameState.Defeat -> sendEffect(BossCombatEffect.CombatEnded)
+                    is GameState.FloorCleared -> sendEffect(BossCombatEffect.FloorCleared)
+                    is GameState.DungeonCleared -> sendEffect(BossCombatEffect.DungeonCleared)
+                    is GameState.Defeat -> sendEffect(BossCombatEffect.Defeated)
                     else -> Unit
                 }
             }
@@ -52,20 +66,22 @@ class BossCombatViewModel @Inject constructor(
     override suspend fun handleIntent(intent: BossCombatIntent) {
         when (intent) {
             is BossCombatIntent.SelectAction -> setState { copy(selectedIndex = intent.index) }
+
             is BossCombatIntent.RotateSelection -> setState {
-                val next = (selectedIndex + intent.steps).mod(COMBAT_ACTIONS.size)
-                copy(selectedIndex = next)
+                copy(selectedIndex = (selectedIndex + intent.steps).mod(COMBAT_ACTIONS.size))
             }
+
             BossCombatIntent.ConfirmAction -> resolveAction()
         }
     }
 
     private suspend fun resolveAction() {
-        val currentState = state.value
-        if (currentState.isResolving) return
-        setState { copy(isResolving = true) }
+        val current = state.value
+        val monster = current.monster ?: return
+        if (current.isResolving) return
 
-        val outcome = executeCombatActionUseCase(currentState.selectedAction, currentState.boss)
+        setState { copy(isResolving = true) }
+        val outcome = executeCombatAction(current.selectedAction, monster, current.monsterHp)
         hapticFeedbackManager.play(outcome.toHapticPattern())
     }
 
@@ -75,7 +91,7 @@ class BossCombatViewModel @Inject constructor(
         is CombatOutcome.PlayerSpellCast -> HapticPattern.SPELL_CAST
         is CombatOutcome.PlayerParried -> HapticPattern.PARRY_SUCCESS
         is CombatOutcome.PlayerDamaged -> HapticPattern.DAMAGE_TAKEN
-        is CombatOutcome.BossDefeated -> HapticPattern.CRITICAL_HIT
-        CombatOutcome.PlayerDefeated -> HapticPattern.DAMAGE_TAKEN
+        is CombatOutcome.MonsterSlain -> HapticPattern.CRITICAL_HIT
+        is CombatOutcome.PlayerDefeated -> HapticPattern.DAMAGE_TAKEN
     }
 }

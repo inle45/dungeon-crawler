@@ -1,4 +1,4 @@
-package com.dungeoncrawler.wearos.presentation.combat
+package com.dungeoncrawler.wearos.presentation.components
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -12,14 +12,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import kotlin.math.abs
 import kotlin.math.sign
 
 /**
- * Wraps [content] so the rotating crown cycles through the 3 combat actions: each accumulated
- * scroll past [stepThreshold] pixels advances the selection by one and triggers [onScrollStep].
+ * Wraps [content] so the rotating crown steps through a short list of choices — combat actions,
+ * or the two ways out of a cleared dungeon. Each accumulated scroll past [stepThreshold] pixels
+ * advances the selection by one and calls [onScrollStep] with +1 or -1.
  */
 @Composable
-fun RotaryActionSelector(
+fun RotarySelector(
     onScrollStep: (Int) -> Unit,
     modifier: Modifier = Modifier,
     stepThreshold: Float = 24f,
@@ -38,9 +40,8 @@ fun RotaryActionSelector(
             .focusable()
             .onRotaryScrollEvent { event ->
                 accumulated += event.verticalScrollPixels
-                if (kotlin.math.abs(accumulated) >= stepThreshold) {
-                    val steps = (accumulated / stepThreshold).toInt()
-                    onScrollStep(steps.sign)
+                if (abs(accumulated) >= stepThreshold) {
+                    onScrollStep(accumulated.sign.toInt())
                     accumulated = 0f
                 }
                 true

@@ -24,13 +24,15 @@ fun ActionButton(
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     selectedBorderColor: Color = GoldAccent,
     colors: ButtonColors = ButtonDefaults.buttonColors(backgroundColor = OledBlack),
 ) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier
-            .size(48.dp)
+            .size(46.dp)
             .then(
                 if (isSelected) {
                     Modifier.border(2.dp, selectedBorderColor, CircleShape)
@@ -45,7 +47,7 @@ fun ActionButton(
             contentDescription = contentDescription,
             modifier = Modifier
                 .padding(8.dp)
-                .size(28.dp),
+                .size(26.dp),
         )
     }
 }

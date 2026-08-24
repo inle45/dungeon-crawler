@@ -1,73 +1,162 @@
 package com.dungeoncrawler.wearos.domain.usecase
 
-import com.dungeoncrawler.wearos.domain.model.BossEncounter
+import com.dungeoncrawler.wearos.domain.catalog.DungeonCatalog
 import com.dungeoncrawler.wearos.domain.model.CombatAction
 import com.dungeoncrawler.wearos.domain.model.CombatOutcome
 import com.dungeoncrawler.wearos.domain.model.GameState
+import com.dungeoncrawler.wearos.domain.model.HeroPower
+import com.dungeoncrawler.wearos.domain.model.ItemPassive
+import com.dungeoncrawler.wearos.domain.model.Monster
+import com.dungeoncrawler.wearos.domain.model.MonsterRole
 import com.dungeoncrawler.wearos.domain.repository.GameProgressRepository
-import com.dungeoncrawler.wearos.domain.repository.PlayerRepository
+import com.dungeoncrawler.wearos.domain.repository.HeroRepository
 import javax.inject.Inject
+import kotlin.math.roundToInt
 import kotlin.random.Random
-import kotlinx.coroutines.flow.first
 
-/** Resolves one player action in an active [GameState.InCombat] turn and advances combat state. */
+/**
+ * Resolves one player turn against the floor's boss. Every number here comes from equipped gear
+ * — crit chance, armor pierce, life steal and riposte are all item passives, never level-ups.
+ */
 class ExecuteCombatActionUseCase @Inject constructor(
-    private val playerRepository: PlayerRepository,
+    private val heroRepository: HeroRepository,
     private val gameProgressRepository: GameProgressRepository,
+    private val computeHeroPower: ComputeHeroPowerUseCase,
+    private val advanceFloor: AdvanceFloorUseCase,
+    private val rollLoot: RollLootUseCase,
 ) {
-    suspend operator fun invoke(action: CombatAction, boss: BossEncounter): CombatOutcome {
-        val player = playerRepository.observePlayerStats().first()
-        val equipment = playerRepository.observeEquipment().first()
+    private val random = Random.Default
 
-        var updatedBoss = boss
-        var updatedPlayer = player
-        val outcome: CombatOutcome
+    suspend operator fun invoke(
+        action: CombatAction,
+        monster: Monster,
+        monsterHp: Int,
+    ): CombatOutcome {
+        val power = computeHeroPower.once()
 
-        when (action) {
-            CombatAction.ATTACK -> {
-                val isCritical = Random.nextFloat() < 0.2f
-                val rawDamage = player.effectiveAttack(equipment)
-                val damage = if (isCritical) (rawDamage * 1.8f).toInt() else rawDamage
-                updatedBoss = boss.copy(currentHp = (boss.currentHp - damage).coerceAtLeast(0))
-                outcome = if (isCritical) {
-                    CombatOutcome.PlayerCriticalHit(damage)
-                } else {
-                    CombatOutcome.PlayerStandardHit(damage)
-                }
-            }
-            CombatAction.SPELL -> {
-                val damage = player.effectiveMagicPower(equipment) + Random.nextInt(0, 5)
-                updatedBoss = boss.copy(currentHp = (boss.currentHp - damage).coerceAtLeast(0))
-                outcome = CombatOutcome.PlayerSpellCast(damage)
-            }
-            CombatAction.DEFENSE -> {
-                val isParried = Random.nextFloat() < 0.4f
-                val bossDamage = 8 + boss.floorNumber * 2
-                if (isParried) {
-                    outcome = CombatOutcome.PlayerParried(bossDamage)
-                } else {
-                    val mitigated = (bossDamage - player.effectiveDefense(equipment)).coerceAtLeast(1)
-                    updatedPlayer = player.copy(currentHp = (player.currentHp - mitigated).coerceAtLeast(0))
-                    outcome = CombatOutcome.PlayerDamaged(mitigated)
-                }
-            }
+        val turn = when (action) {
+            CombatAction.ATTACK -> attack(power, monster, monsterHp)
+            CombatAction.SPELL -> spell(power, monsterHp)
+            CombatAction.DEFENSE -> defend(power, monster, monsterHp)
         }
 
-        playerRepository.updatePlayerStats { updatedPlayer }
+        heroRepository.updateHeroStats { it.copy(currentHp = turn.heroHp) }
 
         val finalOutcome = when {
-            updatedBoss.isDefeated -> CombatOutcome.BossDefeated(boss.floorNumber)
-            !updatedPlayer.isAlive -> CombatOutcome.PlayerDefeated
-            else -> outcome
+            turn.monsterHp <= 0 -> CombatOutcome.MonsterSlain(monster, rollLoot(monster))
+            turn.heroHp <= 0 -> CombatOutcome.PlayerDefeated(monster)
+            else -> turn.outcome
         }
 
-        val nextState = when (finalOutcome) {
-            is CombatOutcome.BossDefeated -> GameState.Victory(updatedPlayer, boss.floorNumber)
-            is CombatOutcome.PlayerDefeated -> GameState.Defeat(boss.floorNumber)
-            else -> GameState.InCombat(updatedPlayer, updatedBoss, outcome)
-        }
-        gameProgressRepository.setGameState(nextState)
-
+        publishState(finalOutcome, monster, turn)
         return finalOutcome
+    }
+
+    // ------------------------------------------------------------------ actions
+
+    private fun attack(power: HeroPower, monster: Monster, monsterHp: Int): TurnResult {
+        val isCritical = random.nextInt(100) < power.total.critRate
+        val raw = power.total.attack.let { if (isCritical) (it * 1.8f).roundToInt() else it }
+        val damage = raw.afterMonsterDefense(monster, power)
+
+        val lifeStolen = (damage * power.passiveMagnitude(ItemPassive.LIFE_STEAL)).roundToInt()
+        val heroHp = (power.currentHp + lifeStolen).coerceAtMost(power.maxHp)
+
+        return TurnResult(
+            monsterHp = monsterHp - damage,
+            heroHp = heroHp,
+            outcome = if (isCritical) {
+                CombatOutcome.PlayerCriticalHit(damage, lifeStolen)
+            } else {
+                CombatOutcome.PlayerStandardHit(damage, lifeStolen)
+            },
+        )
+    }
+
+    private fun spell(power: HeroPower, monsterHp: Int): TurnResult {
+        // Spells bypass armor entirely — that is what makes magic gear worth a slot.
+        val damage = (power.total.magicPower + random.nextInt(0, 6)).coerceAtLeast(1)
+        return TurnResult(
+            monsterHp = monsterHp - damage,
+            heroHp = power.currentHp,
+            outcome = CombatOutcome.PlayerSpellCast(damage),
+        )
+    }
+
+    private fun defend(power: HeroPower, monster: Monster, monsterHp: Int): TurnResult {
+        val incoming = monster.attack
+        val parried = random.nextInt(100) < PARRY_CHANCE_PERCENT
+
+        if (parried) {
+            val riposte = (incoming * power.passiveMagnitude(ItemPassive.RIPOSTE)).roundToInt()
+            return TurnResult(
+                monsterHp = monsterHp - riposte,
+                heroHp = power.currentHp,
+                outcome = CombatOutcome.PlayerParried(incoming, riposte),
+            )
+        }
+
+        val mitigated = ((incoming - power.total.defense) * (1f - power.total.damageReduction / 100f))
+            .roundToInt()
+            .coerceAtLeast(1)
+
+        return TurnResult(
+            monsterHp = monsterHp,
+            heroHp = power.currentHp - mitigated,
+            outcome = CombatOutcome.PlayerDamaged(mitigated),
+        )
+    }
+
+    private fun Int.afterMonsterDefense(monster: Monster, power: HeroPower): Int {
+        val pierced = (monster.defense * (1f - power.passiveMagnitude(ItemPassive.ARMOR_PIERCE)))
+        return (this - pierced).roundToInt().coerceAtLeast(1)
+    }
+
+    // ------------------------------------------------------------------ state
+
+    private suspend fun publishState(outcome: CombatOutcome, monster: Monster, turn: TurnResult) {
+        val progress = heroRepository.getDungeonProgress()
+
+        val nextState = when (outcome) {
+            is CombatOutcome.MonsterSlain -> when (monster.role) {
+                MonsterRole.SUPREME_BOSS -> {
+                    val next = advanceFloor.markCleared()
+                    GameState.DungeonCleared(
+                        dungeon = DungeonCatalog.findById(progress.currentDungeonId) ?: DungeonCatalog.FIRST,
+                        supremeBoss = monster,
+                        loot = outcome.loot,
+                        nextDungeon = next,
+                    )
+                }
+                else -> {
+                    advanceFloor.advance()
+                    GameState.FloorCleared(
+                        progress = heroRepository.getDungeonProgress(),
+                        monster = monster,
+                        loot = outcome.loot,
+                    )
+                }
+            }
+            is CombatOutcome.PlayerDefeated -> GameState.Defeat(progress, monster)
+            else -> GameState.InCombat(
+                progress = progress,
+                monster = monster,
+                monsterHp = turn.monsterHp.coerceAtLeast(0),
+                heroHp = turn.heroHp.coerceAtLeast(0),
+                lastOutcome = outcome,
+            )
+        }
+
+        gameProgressRepository.setGameState(nextState)
+    }
+
+    private data class TurnResult(
+        val monsterHp: Int,
+        val heroHp: Int,
+        val outcome: CombatOutcome,
+    )
+
+    private companion object {
+        const val PARRY_CHANCE_PERCENT = 40
     }
 }

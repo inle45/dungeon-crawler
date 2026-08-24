@@ -2,9 +2,8 @@ package com.dungeoncrawler.wearos.domain.usecase
 
 import com.dungeoncrawler.wearos.domain.GameConstants
 import com.dungeoncrawler.wearos.domain.repository.HealthRepository
-import com.dungeoncrawler.wearos.domain.repository.PlayerRepository
+import com.dungeoncrawler.wearos.domain.repository.HeroRepository
 import javax.inject.Inject
-import kotlinx.coroutines.flow.collect
 
 /**
  * Consumes step deltas from Health Services, persists the running total, and fires the
@@ -12,7 +11,7 @@ import kotlinx.coroutines.flow.collect
  */
 class TrackStepsUseCase @Inject constructor(
     private val healthRepository: HealthRepository,
-    private val playerRepository: PlayerRepository,
+    private val heroRepository: HeroRepository,
     private val resolveMicroEventUseCase: ResolveMicroEventUseCase,
     private val triggerBossEncounterUseCase: TriggerBossEncounterUseCase,
 ) {
@@ -22,10 +21,10 @@ class TrackStepsUseCase @Inject constructor(
 
             var previousTotal = 0L
             var newTotal = 0L
-            playerRepository.updatePlayerStats { stats ->
-                previousTotal = stats.totalSteps
-                newTotal = stats.totalSteps + stepDelta
-                stats.copy(totalSteps = newTotal)
+            heroRepository.updateHeroStats { hero ->
+                previousTotal = hero.totalSteps
+                newTotal = hero.totalSteps + stepDelta
+                hero.copy(totalSteps = newTotal)
             }
 
             val microEventsCrossed = newTotal / GameConstants.STEPS_PER_MICRO_EVENT -
